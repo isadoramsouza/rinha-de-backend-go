@@ -36,8 +36,8 @@ func NewRepository(db *pgxpool.Pool, redis rueidis.Client) Repository {
 }
 
 func (r *repository) Save(ctx context.Context, p domain.Pessoa) error {
-	alreadyExist, err := r.CacheExistePessoa(p.Apelido)
-	if alreadyExist {
+	pessoaAlreadyExistInCache, err := r.PessoaByApelidoExistsInCache(p.Apelido)
+	if pessoaAlreadyExistInCache {
 		return ErrDuplicateApelido
 	}
 
@@ -54,16 +54,16 @@ func (r *repository) Save(ctx context.Context, p domain.Pessoa) error {
 		}
 	}
 
-	go r.CacheSave(&p)
+	go r.SavePessoaInCache(&p)
 
 	return nil
 }
 
 func (r *repository) Get(ctx context.Context, id string) (domain.Pessoa, error) {
-	pessoaCache, err1 := r.CacheGetPessoa(id)
+	pessoaFromCache, err1 := r.GetPessoaByIDInCache(id)
 
-	if pessoaCache != nil {
-		return *pessoaCache, nil
+	if pessoaFromCache != nil {
+		return *pessoaFromCache, nil
 	}
 
 	if err1 != nil {
@@ -113,16 +113,16 @@ func (r *repository) Count(ctx context.Context) (int, error) {
 	return count, nil
 }
 
-func (r *repository) CacheSave(pessoa *domain.Pessoa) error {
+func (r *repository) SavePessoaInCache(pessoa *domain.Pessoa) error {
 	ctx := context.Background()
 	pessoaString, err := sonic.MarshalString(pessoa)
 	if err != nil {
 		return err
 	}
 
-	pessoaSaved := r.cache.B().Set().Key("pessoa_" + pessoa.ID).Value(pessoaString).Build()
-	apelidoSaved := r.cache.B().Set().Key("pessoa_apelido_" + pessoa.Apelido).Value(pessoa.Apelido).Build()
-	for _, resp := range r.cache.DoMulti(ctx, apelidoSaved, pessoaSaved) {
+	pessoaInCached := r.cache.B().Set().Key("pessoa-id-" + pessoa.ID).Value(pessoaString).Build()
+	apelidoInCache := r.cache.B().Set().Key("pessoa-apelido-" + pessoa.Apelido).Value(pessoa.Apelido).Build()
+	for _, resp := range r.cache.DoMulti(ctx, apelidoInCache, pessoaInCached) {
 		if err := resp.Error(); err != nil {
 			return err
 		}
@@ -130,23 +130,23 @@ func (r *repository) CacheSave(pessoa *domain.Pessoa) error {
 	return nil
 }
 
-func (r *repository) CacheExistePessoa(apelido string) (bool, error) {
+func (r *repository) PessoaByApelidoExistsInCache(apelido string) (bool, error) {
 	ctx := context.Background()
-	value, _ := r.cache.Do(ctx, r.cache.B().Get().Key("pessoa_apelido_"+apelido).Build()).ToString()
-	if value != "" {
+	exists, _ := r.cache.Do(ctx, r.cache.B().Get().Key("pessoa-apelido-"+apelido).Build()).ToString()
+	if exists != "" {
 		return true, nil
 	}
 	return false, nil
 }
 
-func (r *repository) CacheGetPessoa(id string) (*domain.Pessoa, error) {
+func (r *repository) GetPessoaByIDInCache(id string) (*domain.Pessoa, error) {
 	ctx := context.Background()
-	result, err := r.cache.Do(ctx, r.cache.B().Get().Key("pessoa_"+id).Build()).ToString()
+	pessoaResult, err := r.cache.Do(ctx, r.cache.B().Get().Key("pessoa-id-"+id).Build()).ToString()
 	if err != nil {
 		return nil, err
 	}
 	var pessoa *domain.Pessoa
-	err = json.Unmarshal([]byte(result), &pessoa)
+	err = json.Unmarshal([]byte(pessoaResult), &pessoa)
 	if err != nil {
 		return nil, err
 	}
