@@ -1,6 +1,6 @@
 # Rinha de Backend 2023 - Go
 
-Aplicação desenvolvida para a participação na Rinha de Backend! </br>
+Aplicação desenvolvida para a participação na [Rinha de Backend](https://github.com/zanfranceschi/rinha-de-backend-2023-q3)! </br>
 
 ## Stack
 
